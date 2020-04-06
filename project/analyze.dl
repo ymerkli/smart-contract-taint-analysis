@@ -1,0 +1,130 @@
+#define ENABLE_INPUT_FROM_FILES
+
+.number_type ArgIndex    // Index used to qualify block arguments
+.symbol_type Transfer    // ID of a transfer between blocks
+.symbol_type Name        // Name associated to an object
+.symbol_type SSA         // ID of a statement or block argument and its value
+.symbol_type Block       // ID of a basic block
+
+// -- input relations --
+
+// Entry block for a function
+.decl function(id_block: Block, name: Name)
+
+// All statements
+.decl statement(id: SSA)
+
+// All blocks
+.decl block(id_block: Block)
+
+// Associates blocks to contained statements
+.decl blockStmt(id_block: Block, id_stmt: SSA)
+
+// An input argument to a block
+.decl argument(id_arg: SSA,
+               id_block: Block,
+               index: ArgIndex)
+
+// Follows relation over statements within single blocks
+.decl follows(id_next: SSA, id_prev: SSA)
+
+.decl assign(id: SSA, var_id: SSA)                      // Assignments from var_id to id
+.decl const(id: SSA, value: symbol)                     // Constants
+.decl uop(id: SSA, id_var: SSA, op: Name)               // Unary operations
+.decl bop(id: SSA, id_lhs: SSA, id_rhs: SSA, op: Name)  // Binary operations
+
+.decl load(id: SSA, field: Name)                        // Storage field read
+.decl store(id: SSA, field: Name, var_id: SSA)          // Storage field write
+
+// Member access (e.g. msg.sender)
+.decl structLoad(id: SSA, id_struct: SSA, field: Name)
+
+// Member access (e.g. someStruct.value = x, not relevant for the project)
+.decl structStore(id: SSA, id_struct: SSA, field: Name, id_var: SSA)
+
+// Goto transfer with id `id_transfer` from `id_block_from` to `id_block_to`
+.decl goto(id_transfer: Transfer,
+           id_block_from: Block,
+           id_block_to: Block)
+
+// Conditional branching (think of two Goto's for each true/false branch)
+.decl branch(id_transfer_true: Transfer,
+             id_transfer_false: Transfer,
+             id_block_from: Block,
+             id_block_true: Block,
+             id_block_false: Block,
+             var_cond_id: SSA)  // `var_cond_id` references the condition
+
+// Jump from a block `id_block_from` to a different function with entry block
+// `id_block_to` (i.e. a function call). The called function returns to the
+// continuation block `id_continuation` of the caller function via return
+// transfers.
+.decl jump(id_transfer: Transfer,
+           id_block_from: Block,
+           id_block_to: Block,
+           id_continuation: Block)
+
+// Return transfer (note there is no target block; if needed, this can be
+// inferred at call sites via the `id_continuation` of the jump transfer).
+.decl return(id_transfer: Transfer, id_block_from: Block)
+
+// List of arguments passed in a transfer
+.decl transferArgument(id_transfer: Transfer, id_argument_value: SSA, index: ArgIndex)
+
+// Ignore these...
+//.decl arrayStore(id: SSA, id_array: SSA, id_index: SSA, id_var: SSA)
+//.decl mapStore(id: SSA, id_map: SSA, id_key: SSA, id_var: SSA)
+//.decl arrayLoad(id: SSA, id_array: SSA, id_index: SSA)
+//.decl mapLoad(id: SSA, id_map: SSA, id_key: SSA)
+//.decl call(id_transfer: Transfer, id_block_from: Block, id_block_to: Block, id_continuation: Block)
+//.decl unknownBlock(id_block: Block)
+.decl selfdestruct(id: SSA, address: SSA)
+.decl revert(id_transfer: Transfer, id_block: Block)
+.decl builtinVariable(id: SSA, name: symbol)
+
+#ifdef ENABLE_INPUT_FROM_FILES
+.input function
+.input block
+.input blockStmt
+.input follows
+.input argument
+.input statement
+.input assign
+.input const
+.input uop
+.input bop
+.input load
+.input structLoad
+.input store
+.input structStore
+.input goto
+.input branch
+.input return
+.input jump
+.input transferArgument
+.input selfdestruct
+.input revert
+.input builtinVariable
+// Ignore these...
+//.input arrayLoad
+//.input mapLoad
+//.input arrayStore
+//.input mapStore
+//.input call
+//.input unknownBlock
+#endif
+
+
+// Helper relations
+.decl msgSender(id: SSA)
+msgSender(id) :- builtinVariable(id, "SENDER").
+
+.decl msgValue(id: SSA)
+msgValue(id) :- builtinVariable(id, "VALUE").
+// -- output relations --
+.decl tainted_sinks(id: SSA)
+
+// Your code goes here...
+tainted_sinks(id) :- selfdestruct(id,_).
+
+.output tainted_sinks
