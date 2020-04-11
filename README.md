@@ -7,7 +7,7 @@
 ## Setup Instructions
 The project requires Python 3.7. You will need the following software and library:
 * Solidity: https://github.com/ethereum/solidity
-* Graphviz: https://github.com/graphp/graphviz
+* Graphviz: https://gitlab.com/graphviz/graphviz/
 * Souffle: https://github.com/souffle-lang/souffle
 * py-solc: https://github.com/ethereum/py-solc
 
