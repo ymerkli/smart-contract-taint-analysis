@@ -1,0 +1,80 @@
+#ifndef STORAGE_UTILS
+#define STORAGE_UTILS
+
+/************************* Storage Operations *************************/
+
+.comp StorageTransferOps {
+    .decl property(field: Name, tainted_by_field: Name, element: Element, context: CallStack)
+    .decl populateProperty(field: Name, tainted_by_field: Name, element: Element, context: CallStack)
+
+    property(field, tainted_by_field, element, context) :-
+        (
+            populateProperty(field, tainted_by_field, element, context);
+
+            // Propagation inside block
+            follows(element, id),
+            !store(element, field, _),
+            property(field, tainted_by_field, id, context);
+
+            // Propagation inside context
+            (
+                firstSSAInBlock(id_block_to, element);
+                (element=id_block_to, !blockStoresTo(id_block_to, field))
+            ),
+            (
+                goto(id_transfer, _, id_block_to);
+                branch(id_transfer, _, _, id_block_to, _, _);
+                branch(_, id_transfer, _, _, id_block_to, _)
+            ),
+            propertyTransfer(field, tainted_by_field, id_transfer, context);
+
+            // Propagation into sub-contexts
+            (
+                firstSSAInBlock(calleeFunction, element);
+                (element=calleeFunction, !blockStoresTo(calleeFunction, field))
+            ),
+            jump(transferToCallee, _, calleeFunction, _),
+            propertyTransfer(field, tainted_by_field, transferToCallee, callerContext),
+            contexts.contextForCall(calleeFunction, transferToCallee, callerContext, context);
+
+            // Propagation into parent-contexts
+            (
+                firstSSAInBlock(id_block_cont, element);
+                (element=id_block_cont, !blockStoresTo(id_block_cont, field))
+            ),
+            jump(transferToCallee, _, calleeFunction, id_block_cont),
+            return(transferToCaller, _),
+            isInFunction(transferToCaller, calleeFunction),
+            propertyTransfer(field, tainted_by_field, transferToCaller, calleeContext),
+            contexts.contextForCall(calleeFunction, transferToCallee, context, calleeContext)
+        ).
+
+    .decl propertyTransfer(field: Name, tainted_by_field: Name, id_transfer: Transfer, context: CallStack)
+    propertyTransfer(field, tainted_by_field, id_transfer, context) :-
+        transferFrom(id_transfer, id_block_from),
+        (
+            lastSSAInBlock(id_block_from, id);
+            (id=id_block_from, !blockStoresTo(id_block_from, field))
+        ),
+        property(field, tainted_by_field, id, context).
+}
+
+.comp HardTaintStorageOps : StorageTransferOps {
+    .decl field(field: Name, element: Element, context: CallStack)
+    field(field, element, context) :- property(field, _, element, context).
+
+    .decl populateField(field: Name, element: Element, context: CallStack)
+    populateProperty(field, tainted_by_field, element, context) :-
+        populateField(field, element, context),
+        tainted_by_field="".
+}
+
+.comp WeakTaintStorageOps : StorageTransferOps {
+    .decl field(field: Name, tainted_by_field: Name, element: Element, context: CallStack)
+    field(field, tainted_by_field, element, context) :- property(field, tainted_by_field, element, context).
+
+    .decl populateField(field: Name, tainted_by_field: Name, element: Element, context: CallStack)
+    populateProperty(field, tainted_by_field, element, context) :- populateField(field, tainted_by_field, element, context).
+}
+
+#endif

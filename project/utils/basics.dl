@@ -1,0 +1,89 @@
+/************************* Basics *************************/
+
+// Entry block for a function
+.decl function(id_block: Block, name: Name)
+
+// All statements
+.decl statement(id: SSA)
+
+// All blocks
+.decl block(id_block: Block)
+
+// Associates blocks to contained statements
+.decl blockStmt(id_block: Block, id_stmt: SSA)
+
+// An input argument to a block
+.decl argument(id_arg: SSA, id_block: Block, index: ArgIndex)
+
+// Follows relation over statements within single blocks
+.decl follows(id_next: SSA, id_prev: SSA)
+
+/************************* Statements *************************/
+
+.decl assign(id: SSA, id_var: SSA)                      // Assignments from id_var to id
+.decl const(id: SSA, value: symbol)                     // Constants
+.decl uop(id: SSA, id_var: SSA, op: Name)               // Unary operations
+.decl bop(id: SSA, id_lhs: SSA, id_rhs: SSA, op: Name)  // Binary operations
+
+.decl load(id: SSA, field: Name)                        // Storage field read
+.decl store(id: SSA, field: Name, id_var: SSA)          // Storage field write
+
+/************************* Transfers *************************/
+
+// Goto transfer with id `id_transfer` from `id_block_from` to `id_block_to`
+.decl goto(id_transfer: Transfer, id_block_from: Block, id_block_to: Block)
+
+// Conditional branching (think of two Goto's for each true/false branch)
+.decl branch(id_transfer_true: Transfer,
+id_transfer_false: Transfer,
+id_block_from: Block,
+id_block_true: Block,
+id_block_false: Block,
+var_cond_id: SSA)  // `var_cond_id` references the condition
+
+// Jump from a block `id_block_from` to a different function with entry block
+// `id_block_to` (i.e. a function call). The called function returns to the
+// continuation block `id_block_cont` of the caller function via return
+// transfers.
+.decl jump(id_transfer: Transfer,
+id_block_from: Block,
+id_block_to: Block,
+id_block_cont: Block)
+
+// Return transfer (note there is no target block; if needed, this can be
+// inferred at call sites via the `id_block_cont` of the jump transfer).
+.decl return(id_transfer: Transfer, id_block_from: Block)
+
+// List of arguments passed in a transfer
+.decl transferArgument(id_transfer: Transfer, id_argument_value: SSA, index: ArgIndex)
+
+/************************* Others *************************/
+
+.decl selfdestruct(id: SSA, address: SSA)
+.decl revert(id_transfer: Transfer, id_block: Block)
+.decl stop(id_transfer: Transfer, id_block: Block)
+.decl builtinVariable(id: SSA, name: symbol)
+
+/************************* Inputs *************************/
+
+.input argument
+.input assign
+.input block
+.input blockStmt
+.input bop
+.input branch
+.input builtinVariable
+.input const
+.input follows
+.input function
+.input goto
+.input jump
+.input load
+.input return
+.input revert
+.input selfdestruct
+.input statement
+.input stop
+.input store
+.input transferArgument
+.input uop

@@ -1,0 +1,43 @@
+#ifndef CONTEXT_UTILS
+#define CONTEXT_UTILS
+
+#include "util-list.dl"
+
+/************************* Function Context *************************/
+
+.comp Context {
+    .init transferStacks = ListOps<TransferStack>
+    transferStacks.lists(stack) :- contexts([_, stack]).
+
+    .decl contextForInit(calleeFunction: Function, calleeContext: CallStack)
+    .decl populateContextForInit(calleeFunction: Function)
+    contextForInit(calleeFunction, [calleeFunction, nil]) :- populateContextForInit(calleeFunction).
+
+    .decl contextForCall(calleeFunction: Function, transferToCallee: Transfer, callerContext: CallStack, calleeContext: CallStack)
+    .decl populateContextForCall(calleeFunction: Function, transferToCallee: Transfer, callerContext: CallStack)
+    contextForCall(calleeFunction, transferToCallee, callerContext, calleeContext) :-
+        populateContextForCall(calleeFunction, transferToCallee, callerContext),
+        callerContext = [callerFunction, transferToCaller],
+        calleeContext = [calleeFunction, [transferToCallee, transferToCaller]],
+        transferStacks.length(transferToCaller, l), l < 4.
+
+    .decl contextFor(calleeFunction: Function, calleeContext: CallStack)
+    contextFor(calleeFunction, calleeContext) :-
+        (
+            contextForInit(calleeFunction, calleeContext);
+            contextForCall(calleeFunction, _, _, calleeContext)
+        ).
+
+    .decl contexts(context: CallStack)
+    contexts(context) :- contextFor(_, context).
+
+    .decl elementInContext(element: Element, context: CallStack)
+
+    .decl contextDepth(context: CallStack, depth: number)
+    contextDepth(context, depth) :-
+        contextFor(function, context),
+        context = [function, transferStack],
+        transferStacks.length(transferStack, depth).
+}
+
+#endif
