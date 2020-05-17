@@ -1,130 +1,215 @@
-#define ENABLE_INPUT_FROM_FILES
+#include "utils/types.dl"       // Type Definitions
+#include "utils/basics.dl"      // Basic Declarations & Input
+#include "utils/helpers.dl"     // Helper Declarations
 
-.number_type ArgIndex    // Index used to qualify block arguments
-.symbol_type Transfer    // ID of a transfer between blocks
-.symbol_type Name        // Name associated to an object
-.symbol_type SSA         // ID of a statement or block argument and its value
-.symbol_type Block       // ID of a basic block
+#include "utils/util-context.dl"    // Function Context
+#include "utils/util-graph.dl"      // Graph Operations
+#include "utils/util-propagate.dl"  // Propagate Operations
+#include "utils/util-storage.dl"    // Storage Operations
 
-// -- input relations --
+/************************* Function & Block Context *************************/
 
-// Entry block for a function
-.decl function(id_block: Block, name: Name)
+.init contexts = Context
+.init block_graph  = DiGraphDomOps<Block>
 
-// All statements
-.decl statement(id: SSA)
+// Setup contexts for external function calls
+contexts.populateContextForInit(calleeFunction) :- function(calleeFunction, _).
 
-// All blocks
-.decl block(id_block: Block)
+// Build contexts for internal function calls
+contexts.populateContextForCall(calleeFunction, transferToCallee, callerContext) :-
+    jump(transferToCallee, _, calleeFunction, _),
+    isInFunction(transferToCallee, callerFunction),
+    contexts.contextFor(callerFunction, callerContext).
 
-// Associates blocks to contained statements
-.decl blockStmt(id_block: Block, id_stmt: SSA)
+// Associate elements with contexts
+contexts.elementInContext(element, context) :-
+    isInFunction(element, function),
+    contexts.contextFor(function, context).
 
-// An input argument to a block
-.decl argument(id_arg: SSA,
-               id_block: Block,
-               index: ArgIndex)
+// Setup block graph
+block_graph.edge(id_block_to, id_block_from) :- followsBlock(id_block_to, id_block_from).
 
-// Follows relation over statements within single blocks
-.decl follows(id_next: SSA, id_prev: SSA)
+/************************* Taints *************************/
 
-.decl assign(id: SSA, var_id: SSA)                      // Assignments from var_id to id
-.decl const(id: SSA, value: symbol)                     // Constants
-.decl uop(id: SSA, id_var: SSA, op: Name)               // Unary operations
-.decl bop(id: SSA, id_lhs: SSA, id_rhs: SSA, op: Name)  // Binary operations
+.init is_tainted = HardTaintOps
+.init maybe_tainted = WeakTaintOps
 
-.decl load(id: SSA, field: Name)                        // Storage field read
-.decl store(id: SSA, field: Name, var_id: SSA)          // Storage field write
+// Set hard taints to function arguments, msg.Sencer/msg.Value, loads of tainted fields and returns from context depth 4 or greater
+is_tainted.populateTainted(id, context) :-
+    (
+        (argument(id, function, _), contexts.contextForInit(function, context));
 
-// Member access (e.g. msg.sender)
-.decl structLoad(id: SSA, id_struct: SSA, field: Name)
+        (
+            msgSender(id);
+            msgValue(id);
+            (load(id, field), tainted_storage.field(field, id, context))
+        ),
+        contexts.elementInContext(id, context);
 
-// Member access (e.g. someStruct.value = x, not relevant for the project)
-.decl structStore(id: SSA, id_struct: SSA, field: Name, id_var: SSA)
+        argument(id, id_block_cont, _),
+        jump(transferToCallee, _, calleeFunction, id_block_cont),
+        return(transferToCaller, _),
+        isInFunction(transferToCaller, calleeFunction),
+        contexts.contextDepth(calleeContext, depth), depth > 3,
+        contexts.contextForCall(calleeFunction, transferToCallee, context, calleeContext)
+    ).
 
-// Goto transfer with id `id_transfer` from `id_block_from` to `id_block_to`
-.decl goto(id_transfer: Transfer,
-           id_block_from: Block,
-           id_block_to: Block)
+// Set weak taints to loads of maybe tainted fields
+maybe_tainted.populateTainted(id, tainted_by_field, context) :-
+    load(id, loaded_field),
+    maybe_tainted_storage.field(loaded_field, tainted_by_field, id, context),
+    contexts.elementInContext(id, context).
 
-// Conditional branching (think of two Goto's for each true/false branch)
-.decl branch(id_transfer_true: Transfer,
-             id_transfer_false: Transfer,
-             id_block_from: Block,
-             id_block_true: Block,
-             id_block_false: Block,
-             var_cond_id: SSA)  // `var_cond_id` references the condition
+// Set general taints to hard tainted values and to weak tainted values, where the storage field it depends on is not sanitized
+.decl tainted(id: SSA, context: CallStack)
+tainted(id, context) :-
+    (
+        is_tainted.tainted(id, context);
 
-// Jump from a block `id_block_from` to a different function with entry block
-// `id_block_to` (i.e. a function call). The called function returns to the
-// continuation block `id_continuation` of the caller function via return
-// transfers.
-.decl jump(id_transfer: Transfer,
-           id_block_from: Block,
-           id_block_to: Block,
-           id_continuation: Block)
+        maybe_tainted.tainted(id, tainted_by_field, context),
+        return(_, id_block_from),
+        (
+            lastSSAInBlock(id_block_from, id_prev);
+            id_prev=id_block_from, !blockStoresTo(id_block_from, tainted_by_field)
+        ),
+        tainted_storage.field(tainted_by_field, id_prev, prev_context),
+        (
+            !maybeSanitizedBlock(id_block_from, _, _, prev_context);
+            (maybeSanitizedBlock(id_block_from, _, _, prev_context), notSanitizedBlock(id_block_from, prev_context));
+            (maybeSanitizedBlock(id_block_from, ssa_stack, _, prev_context), taintedSSAStack(ssa_stack, prev_context))
+        ),
+        contexts.contextForInit(_, prev_context)
+    ).
 
-// Return transfer (note there is no target block; if needed, this can be
-// inferred at call sites via the `id_continuation` of the jump transfer).
-.decl return(id_transfer: Transfer, id_block_from: Block)
+// Set general taints to SSAStacks if they contain a tainted SSA
+.decl taintedSSAStack(ssa_stack: SSAStack, context: CallStack)
+taintedSSAStack([head, tail], context) :-
+    (
+        tainted(head, context);
+        taintedSSAStack(tail, context)
+    ),
+    ssa_stack = [head, tail],
+    maybe_guard.guard(_, ssa_stack, _).
 
-// List of arguments passed in a transfer
-.decl transferArgument(id_transfer: Transfer, id_argument_value: SSA, index: ArgIndex)
-
-// Ignore these...
-//.decl arrayStore(id: SSA, id_array: SSA, id_index: SSA, id_var: SSA)
-//.decl mapStore(id: SSA, id_map: SSA, id_key: SSA, id_var: SSA)
-//.decl arrayLoad(id: SSA, id_array: SSA, id_index: SSA)
-//.decl mapLoad(id: SSA, id_map: SSA, id_key: SSA)
-//.decl call(id_transfer: Transfer, id_block_from: Block, id_block_to: Block, id_continuation: Block)
-//.decl unknownBlock(id_block: Block)
-.decl selfdestruct(id: SSA, address: SSA)
-.decl revert(id_transfer: Transfer, id_block: Block)
-.decl builtinVariable(id: SSA, name: symbol)
-
-#ifdef ENABLE_INPUT_FROM_FILES
-.input function
-.input block
-.input blockStmt
-.input follows
-.input argument
-.input statement
-.input assign
-.input const
-.input uop
-.input bop
-.input load
-.input structLoad
-.input store
-.input structStore
-.input goto
-.input branch
-.input return
-.input jump
-.input transferArgument
-.input selfdestruct
-.input revert
-.input builtinVariable
-// Ignore these...
-//.input arrayLoad
-//.input mapLoad
-//.input arrayStore
-//.input mapStore
-//.input call
-//.input unknownBlock
-#endif
-
-
-// Helper relations
-.decl msgSender(id: SSA)
-msgSender(id) :- builtinVariable(id, "SENDER").
-
-.decl msgValue(id: SSA)
-msgValue(id) :- builtinVariable(id, "VALUE").
-// -- output relations --
+// Set general taints to sinks if they appear in not sanitized blocks
 .decl tainted_sinks(id: SSA)
+tainted_sinks(id) :-
+    selfdestruct(id, _),
+    blockStmt(id_block, id),
+    (
+        !maybeSanitizedBlock(id_block, _, 0, context);
+        (maybeSanitizedBlock(id_block, _, 0, context), notSanitizedBlock(id_block, context));
+        (maybeSanitizedBlock(id_block, ssa_stack, 0, context), taintedSSAStack(ssa_stack, context))
+    ),
+    contexts.elementInContext(id, context).
 
-// Your code goes here...
-tainted_sinks(id) :- selfdestruct(id,_).
+/************************* Sanitization *************************/
+
+// Keep track of possible guards
+.init maybe_guard = GuardOps
+maybe_guard.populateGuard(id, ssa_stack, context) :-
+    (
+        (bop(id, id_lhs, id_rhs, _), msgSender(id_lhs), ssa_stack=[id_rhs, nil]);
+        (bop(id, id_lhs, id_rhs, _), msgSender(id_rhs), ssa_stack=[id_lhs, nil])
+    ),
+    contexts.elementInContext(id, context).
+
+// Keep track of possible guard blocks
+.decl maybeGuardBlock(id_block: Block, ssa_stack: SSAStack, context: CallStack)
+maybeGuardBlock(id_block, ssa_stack, context) :-
+    maybe_guard.guard(id, ssa_stack, context),
+    branch(_, _, id_block, _, _, id).
+
+// Keep track of possibly sanitized blocks
+.decl maybeSanitizedBlock(id_block: Block, ssa_stack: SSAStack, backprop: number, context: CallStack)
+maybeSanitizedBlock(id_block, ssa_stack, backprop, context) :-
+    (
+        (maybeGuardBlock(id_block, ssa_stack, context), backprop=0);
+
+        // Blocks that are dominated by a sanitized block are sanitized
+        block_graph.dominatedBy(id_block, dominator),
+        maybeSanitizedBlock(dominator, ssa_stack, backprop, context);
+
+        // Functions called from sanitized blocks are sanitized
+        jump(transferToCallee, id_block_from, id_block, _),
+        maybeSanitizedBlock(id_block_from, ssa_stack, backprop, callerContext),
+        contexts.contextForCall(id_block, transferToCallee, callerContext, context);
+
+        // Blocks that a sanitized function returns to become sanitized
+        jump(transferToCallee, _, calleeFunction, id_block),
+        return(_, id_block_from),
+        isInFunction(id_block_from, calleeFunction),
+        maybeSanitizedBlock(id_block_from, ssa_stack, backprop, calleeContext),
+        contexts.contextForCall(calleeFunction, transferToCallee, context, calleeContext),
+        backprop=0;
+
+        // Backpropagation of sanitized tag
+        followsBlock(id_block_to, id_block),
+        (
+            !isIfBranch(id_block);
+            isIfBranch(id_block), goto(_, id_block_to, _)
+        ),
+        maybeSanitizedBlock(id_block_to, ssa_stack, _, context),
+        backprop=1
+    ).
+
+// Handle multiple return values, where at least one is not sanitized
+.decl notSanitizedBlock(id_block: Block, context: CallStack)
+notSanitizedBlock(id_block, context) :-
+    (
+        jump(transferToCallee, _, calleeFunction, id_block),
+        return(_, id_block_from),
+        isInFunction(id_block_from, calleeFunction),
+        (
+            !maybeSanitizedBlock(id_block_from, _, 0, calleeContext);
+            notSanitizedBlock(id_block_from, calleeContext)
+        ),
+        contexts.contextForCall(calleeFunction, transferToCallee, context, calleeContext);
+
+        // Propagate inside context
+        followsBlock(id_block, id_block_from),
+        !jump(_, id_block_from, _, id_block),
+        notSanitizedBlock(id_block_from, context);
+
+        // Functions called from not sanitized blocks are not sanitized
+        jump(transferToCallee, id_block_from, id_block, _),
+        notSanitizedBlock(id_block_from, callerContext),
+        contexts.contextForCall(id_block, transferToCallee, callerContext, context)
+    ),
+    !maybeGuardBlock(id_block, _, context).
+
+/************************* Storage *************************/
+
+// Set hard taints to fields that are overwritten by a tainted value
+.init tainted_storage = HardTaintStorageOps
+tainted_storage.populateField(field, element, context) :-
+    store(element, field, id_var),
+    is_tainted.tainted(id_var, context).
+
+// Set weak taints to fields at the beginning of all functions, that are tainted at the end of another function
+.init maybe_tainted_storage = WeakTaintStorageOps
+maybe_tainted_storage.populateField(field, tainted_by_field, element, context) :-
+    (
+        store(element, field, id_var),
+        maybe_tainted.tainted(id_var, tainted_by_field, context);
+
+        return(_, id_return_block),
+        (
+            lastSSAInBlock(id_return_block, id);
+            id=id_return_block, !blockStoresTo(id_return_block, field)
+        ),
+        (
+            (tainted_storage.field(field, id, prev_context), tainted_by_field=field);
+            maybe_tainted_storage.field(field, tainted_by_field, id, prev_context)
+        ),
+        contexts.contextForInit(_, prev_context),
+        (
+            firstSSAInBlock(function, element);
+            element=function, !blockStoresTo(function, field)
+        ),
+        contexts.contextForInit(function, context)
+    ).
+
+/************************* Outputs *************************/
 
 .output tainted_sinks

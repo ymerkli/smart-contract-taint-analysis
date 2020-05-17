@@ -1,0 +1,92 @@
+#ifndef PROPAGATE_UTILS
+#define PROPAGATE_UTILS
+
+/************************* Propagate Operations *************************/
+
+.comp TransferOps {
+    .decl property(id: SSA, tainted_by_field: Name, ssa_stack: SSAStack, context: CallStack)
+    .decl populateProperty(id: SSA, tainted_by_field: Name, ssa_stack: SSAStack, context: CallStack)
+    property(id, tainted_by_field, ssa_stack, context) :-
+        (
+            populateProperty(id, tainted_by_field, ssa_stack, context);
+
+            // Propagation inside context
+            (
+                (argument(id, id_block, index), goto(id_transfer, _, id_block));
+                (argument(id, id_block_true, index), branch(id_transfer, _, _, id_block_true, _, _));
+                (argument(id, id_block_false, index), branch(_, id_transfer, _, _, id_block_false, _))
+            ),
+            propertyTransfer(id_transfer, tainted_by_field, ssa_stack, index, context);
+
+            // Propagation into sub-contexts
+            argument(id, calleeFunction, index),
+            jump(transferToCallee, _, calleeFunction, _),
+            propertyTransfer(transferToCallee, tainted_by_field, ssa_stack, index, callerContext),
+            contexts.contextForCall(calleeFunction, transferToCallee, callerContext, context);
+
+            // Propagation into parent-contexts
+            argument(id, id_block_cont, index),
+            jump(transferToCallee, _, calleeFunction, id_block_cont),
+            return(transferToCaller, _),
+            isInFunction(transferToCaller, calleeFunction),
+            propertyTransfer(transferToCaller, tainted_by_field, ssa_stack, index, calleeContext),
+            contexts.contextForCall(calleeFunction, transferToCallee, context, calleeContext)
+        ).
+
+    .decl propertyTransfer(id_transfer: Transfer, tainted_by_field: Name, ssa_stack: SSAStack, index: ArgIndex, context: CallStack)
+    propertyTransfer(id_transfer, tainted_by_field, ssa_stack, index, context) :-
+        transferArgument(id_transfer, id_argument_value, index),
+        property(id_argument_value, tainted_by_field, ssa_stack, context).
+}
+
+.comp TaintOps : TransferOps {
+    property(id, tainted_by_field, ssa_stack, context) :-
+        (
+            assign(id, id_var);
+            bop(id, id_var, _, _);
+            bop(id, _, id_var, _);
+            uop(id, id_var, _)
+        ),
+        property(id_var, tainted_by_field, ssa_stack, context).
+}
+
+.comp HardTaintOps : TaintOps {
+    .decl tainted(id: SSA, context: CallStack)
+    tainted(id, context) :- property(id, _, _, context).
+
+    .decl populateTainted(id: SSA, context: CallStack)
+    populateProperty(id, tainted_by_field, ssa_stack, context) :-
+        populateTainted(id, context),
+        tainted_by_field="",
+        ssa_stack=[id, nil].
+}
+
+.comp WeakTaintOps : TaintOps {
+    .decl tainted(id: SSA, tainted_by_field: Name, context: CallStack)
+    tainted(id, tainted_by_field, context) :- property(id, tainted_by_field, _, context).
+
+    .decl populateTainted(id: SSA, tainted_by_field: Name, context: CallStack)
+    populateProperty(id, tainted_by_field, ssa_stack, context) :-
+        populateTainted(id, tainted_by_field, context),
+        ssa_stack=[id, nil].
+}
+
+.comp GuardOps : TransferOps {
+    .decl guard(id: SSA, ssa_stack: SSAStack, context: CallStack)
+    guard(id, ssa_stack, context) :- property(id, _, ssa_stack, context).
+
+    .decl populateGuard(id: SSA, ssa_stack: SSAStack, context: CallStack)
+    populateProperty(id, tainted_by_field, ssa_stack, context) :-
+        populateGuard(id, ssa_stack, context),
+        tainted_by_field="".
+
+    property(id, tainted_by_field, ssa_stack, context) :-
+        (
+            (assign(id, id_var), property(id_var, tainted_by_field, ssa_stack, context));
+            (uop(id, id_var, _), property(id_var, tainted_by_field, ssa_stack, context));
+            (bop(id, id_lhs, id_rhs, _), property(id_lhs, tainted_by_field, ssa_stack_lhs, context), ssa_stack=[id_rhs, ssa_stack_lhs]);
+            (bop(id, id_lhs, id_rhs, _), property(id_rhs, tainted_by_field, ssa_stack_rhs, context), ssa_stack=[id_lhs, ssa_stack_rhs])
+        ).
+}
+
+#endif

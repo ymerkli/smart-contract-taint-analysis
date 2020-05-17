@@ -1,0 +1,78 @@
+{
+  "basic": {
+    "0": "Tainted",
+    "1": "Safe",
+    "2": "Safe",
+    "3": "Tainted",
+    "4": "Tainted",
+    "5": "Safe",
+    "6": "Tainted",
+    "7": "Tainted",
+    "8": "Safe",
+    "9": "Safe",
+    "10": "Tainted",
+    "11": "Tainted",
+    "12": "Safe"
+  },
+  "given": {
+    "0": "Tainted",
+    "1": "Tainted",
+    "2": "Safe",
+    "3": "Safe",
+    "4": "Tainted",
+    "5": "Safe",
+    "6": "Tainted",
+    "7": "Safe",
+    "8": "Safe",
+    "9": "Safe",
+    "10": "Tainted",
+    "11": "Safe",
+    "12": "Safe",
+    "13": "Tainted"
+  },
+  "guard": {
+    "0": "Tainted",
+    "1": "Safe",
+    "2": "Safe"
+  },
+  "hard": {
+    "0": "Safe",
+    "1": "Tainted",
+    "2": "Safe",
+    "3": "Tainted",
+    "4": "Safe",
+    "5": "Tainted",
+    "6": "Safe"
+  },
+  "multi_transaction": {
+    "0": "Tainted",
+    "1": "Safe",
+    "2": "Tainted",
+    "3": "Tainted"
+  },
+  "nested": {
+    "0": "Tainted",
+    "1": "Tainted",
+    "2": "Tainted",
+    "3": "Safe",
+    "4": "Safe",
+    "5": "Tainted",
+    "6": "Safe",
+    "7": "Tainted",
+    "8": "Tainted",
+    "9": "Safe",
+    "10": "Safe"
+  },
+  "recursion": {
+    "0": "Tainted",
+    "1": "Tainted"
+  },
+  "storage": {
+    "0": "Safe",
+    "1": "Safe",
+    "2": "Tainted",
+    "3": "Tainted",
+    "4": "Safe",
+    "5": "Safe"
+  }
+}

@@ -1,0 +1,14 @@
+/************************* Type Definitions *************************/
+
+.number_type ArgIndex    // Index used to qualify block arguments
+.symbol_type Transfer    // ID of a transfer between blocks
+.symbol_type Name        // Name associated to an object
+.symbol_type SSA         // ID of a statement or block argument and its value
+.symbol_type Block       // ID of a basic block
+
+.type Function = Block   // Type alias for referring to function blocks
+.type Element = SSA | Block | Transfer // Any Program Element
+
+.type TransferStack = [head: Transfer, tail: TransferStack]
+.type CallStack = [function: Function, transfer: TransferStack]
+.type SSAStack = [head: SSA, tail: SSAStack]

@@ -1,0 +1,14 @@
+#ifndef LIST_UTILS
+#define LIST_UTILS
+
+/************************* List Operations *************************/
+
+.comp ListOps<TList> {
+    .decl lists(list: TList)
+
+    .decl length(list: TList, length: number)
+    length(nil, 0).
+    length(list, tailLength + 1) :- lists(list), list = [head, tail], length(tail, tailLength).
+}
+
+#endif

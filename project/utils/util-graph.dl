@@ -1,0 +1,44 @@
+#ifndef GRAPH_UTILS
+#define GRAPH_UTILS
+
+/************************* Graph Operations *************************/
+
+.comp DiGraph<TNode> {
+    .decl edge(to: TNode, from: TNode)
+
+    .decl node(n: TNode)
+    node(n) :-
+        (
+            edge(n, _);
+            edge(_, n)
+        ).
+
+    .decl outEdgeCount(n: TNode, c: number)
+    outEdgeCount(n, c) :- node(n), c = count : { edge(_, n) }.
+
+    .decl inEdgeCount(n: TNode, c: number)
+    inEdgeCount(n, c) :- node(n), c = count : { edge(n, _) }.
+
+    .decl reachableFrom(to: TNode, from: TNode)
+    reachableFrom(to, from) :-
+        (
+            edge(to, from);
+            (edge(to, mid), reachableFrom(mid, from))
+        ).
+}
+
+.comp DiGraphDomOps<TNode> : DiGraph<TNode> {
+    .decl notDominatedBy(node: TNode, dominator: TNode)
+    notDominatedBy(node, dominator) :-
+        (
+            (notDominatedBy(mid, dominator), edge(node, mid));
+            (node(node), node(dominator), !reachableFrom(node, dominator));
+            (reachableFrom(mid, mid), edge(node, mid), edge(dominator, mid))
+        ),
+        node != dominator.
+
+    .decl dominatedBy(node: TNode, dominator: TNode)
+    dominatedBy(node, dominator) :- node(node), node(dominator), !notDominatedBy(node, dominator).
+}
+
+#endif

@@ -1,0 +1,76 @@
+/************************* Helper Declarations *************************/
+
+// msg.sender
+.decl msgSender(id: SSA)
+msgSender(id) :- builtinVariable(id, "SENDER").
+
+// msg.value
+.decl msgValue(id: SSA)
+msgValue(id) :- builtinVariable(id, "VALUE").
+
+// Block connections (excluding internal function calls)
+.decl followsBlock(id_block_to: Block, id_block_from: Block)
+followsBlock(id_block_to, id_block_from) :-
+    (
+        goto(_, id_block_from, id_block_to);
+        branch(_, _, id_block_from, id_block_to, _, _);
+        branch(_, _, id_block_from, _, id_block_to, _);
+        jump(_, id_block_from, _, id_block_to)
+    ).
+
+// Outgoing transfers of a block
+.decl transferFrom(id_transfer: Transfer, id_block_from: Block)
+transferFrom(id_transfer, id_block_from) :-
+    (
+        goto(id_transfer, id_block_from, _);
+        branch(id_transfer, _, id_block_from, _, _, _);
+        branch(_, id_transfer, id_block_from, _, _, _);
+        jump(id_transfer, id_block_from, _, _);
+        return(id_transfer, id_block_from)
+    ).
+
+// Statements in, transfers originating from & arguments of block (including itself)
+.decl blockElement(element: Element, id_block: Block)
+blockElement(element, element) :- block(element).
+blockElement(element, id_block) :-
+    (
+        blockStmt(id_block, element);
+        transferFrom(element, id_block);
+        argument(element, id_block, _)
+    ).
+
+// Blocks, statements, transfers & arguments in function (excluding internal function calls)
+.decl isInFunction(element: Element, function: Function)
+isInFunction(element, function) :-
+    (
+        blockElement(element, function);
+        (blockElement(element, id_block), block_graph.reachableFrom(id_block, function))
+    ),
+    function(function, _).
+
+// Blocks containing an if branch
+.decl isIfBranch(id_block: Block)
+isIfBranch(id_block) :-
+    branch(_, _, id_block, id_block_true, id_block_false, _),
+    !revert(_, id_block_true),
+    !revert(_, id_block_false),
+    !stop(_, id_block_true),
+    !stop(_, id_block_false).
+
+// First SSAs of a block
+.decl firstSSAInBlock(id_block: Block, id: SSA)
+firstSSAInBlock(id_block, id) :-
+    blockStmt(id_block, id),
+    !follows(id, _).
+
+// Last SSAs of a block
+.decl lastSSAInBlock(id_block: Block, id: SSA)
+lastSSAInBlock(id_block, id) :-
+    blockStmt(id_block, id),
+    !follows(_, id).
+
+// Blocks storing to field
+.decl blockStoresTo(id_block: Block, field: Name)
+blockStoresTo(id_block, field) :-
+    store(id_ssa, field, _),
+    blockStmt(id_block, id_ssa).
