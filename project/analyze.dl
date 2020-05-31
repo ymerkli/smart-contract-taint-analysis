@@ -63,6 +63,7 @@ maybe_tainted.populateTainted(id, tainted_by_field, context) :-
 // Set general taints to hard tainted values and to weak tainted values, where the storage field it depends on is not sanitized
 .decl tainted(id: SSA, context: CallStack)
 tainted(id, context) :-
+    !maybe_guard.guard(id, _, context),
     (
         is_tainted.tainted(id, context);
 
@@ -70,25 +71,26 @@ tainted(id, context) :-
         return(_, id_block_from),
         (
             lastSSAInBlock(id_block_from, id_prev);
-            id_prev=id_block_from, !blockStoresTo(id_block_from, tainted_by_field)
+            id_prev=id_block_from, !blockStmt(id_block_from, _)
         ),
         tainted_storage.field(tainted_by_field, id_prev, prev_context),
         (
             !maybeSanitizedBlock(id_block_from, _, _, prev_context);
             (maybeSanitizedBlock(id_block_from, _, _, prev_context), notSanitizedBlock(id_block_from, prev_context));
-            (maybeSanitizedBlock(id_block_from, ssa_stack, _, prev_context), taintedSSAStack(ssa_stack, prev_context))
+            (maybeSanitizedBlock(id_block_from, ssa_stack, _, prev_context), taintedSSAStack(ssa_stack))
         ),
         contexts.contextForInit(_, prev_context)
     ).
 
 // Set general taints to SSAStacks if they contain a tainted SSA
-.decl taintedSSAStack(ssa_stack: SSAStack, context: CallStack)
-taintedSSAStack([head, tail], context) :-
+.decl taintedSSAStack(ssa_stack: SSAStack)
+taintedSSAStack([head, tail]) :-
     (
-        tainted(head, context);
-        taintedSSAStack(tail, context)
+        tainted(id, id_context);
+        taintedSSAStack(tail)
     ),
     ssa_stack = [head, tail],
+    head = [id, id_context],
     maybe_guard.guard(_, ssa_stack, _).
 
 // Set general taints to sinks if they appear in not sanitized blocks
@@ -99,7 +101,7 @@ tainted_sinks(id) :-
     (
         !maybeSanitizedBlock(id_block, _, 0, context);
         (maybeSanitizedBlock(id_block, _, 0, context), notSanitizedBlock(id_block, context));
-        (maybeSanitizedBlock(id_block, ssa_stack, 0, context), taintedSSAStack(ssa_stack, context))
+        (maybeSanitizedBlock(id_block, ssa_stack, 0, context), taintedSSAStack(ssa_stack))
     ),
     contexts.elementInContext(id, context).
 
@@ -109,8 +111,9 @@ tainted_sinks(id) :-
 .init maybe_guard = GuardOps
 maybe_guard.populateGuard(id, ssa_stack, context) :-
     (
-        (bop(id, id_lhs, id_rhs, _), msgSender(id_lhs), ssa_stack=[id_rhs, nil]);
-        (bop(id, id_lhs, id_rhs, _), msgSender(id_rhs), ssa_stack=[id_lhs, nil])
+        (bop(id, id_lhs, id_rhs, _), msgSender(id_lhs), ssa_stack=[[id_rhs, context], nil]);
+        (bop(id, id_lhs, id_rhs, _), msgSender(id_rhs), ssa_stack=[[id_lhs, context], nil]);
+        (load(id, field), guard_storage.field(field, ssa_stack, id, context))
     ),
     contexts.elementInContext(id, context).
 
@@ -195,8 +198,8 @@ maybe_tainted_storage.populateField(field, tainted_by_field, element, context) :
 
         return(_, id_return_block),
         (
-            lastSSAInBlock(id_return_block, id);
-            id=id_return_block, !blockStoresTo(id_return_block, field)
+            (lastSSAInBlock(id_return_block, id), !selfdestruct(id, _));
+            (id=id_return_block, !blockStmt(id_return_block, _))
         ),
         (
             (tainted_storage.field(field, id, prev_context), tainted_by_field=field);
@@ -204,11 +207,17 @@ maybe_tainted_storage.populateField(field, tainted_by_field, element, context) :
         ),
         contexts.contextForInit(_, prev_context),
         (
-            firstSSAInBlock(function, element);
-            element=function, !blockStoresTo(function, field)
+            (firstSSAInBlock(function, element), !store(element, field, _));
+            (element=function, !blockStmt(function, _))
         ),
         contexts.contextForInit(function, context)
     ).
+
+// capture guards stored in storage fields
+.init guard_storage = GuardStorageOps
+guard_storage.populateField(field, ssa_stack, element, context) :-
+    store(element, field, id_var),
+    maybe_guard.guard(id_var, ssa_stack, context).
 
 /************************* Outputs *************************/
 

@@ -7,7 +7,7 @@ contract Contract {
   function kill(uint x) public payable {
     if(x < 5) {
       if(msg.sender == owner) {
-        //...
+        // ...
       } else {
         selfdestruct(owner);
       }

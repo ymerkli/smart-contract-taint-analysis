@@ -11,4 +11,5 @@
 
 .type TransferStack = [head: Transfer, tail: TransferStack]
 .type CallStack = [function: Function, transfer: TransferStack]
-.type SSAStack = [head: SSA, tail: SSAStack]
+.type SSACtxTuple = [ssa: SSA, context: CallStack]
+.type SSAStack = [head: SSACtxTuple, tail: SSAStack]

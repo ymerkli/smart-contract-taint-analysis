@@ -58,7 +58,7 @@
     populateProperty(id, tainted_by_field, ssa_stack, context) :-
         populateTainted(id, context),
         tainted_by_field="",
-        ssa_stack=[id, nil].
+        ssa_stack=nil.
 }
 
 .comp WeakTaintOps : TaintOps {
@@ -68,7 +68,7 @@
     .decl populateTainted(id: SSA, tainted_by_field: Name, context: CallStack)
     populateProperty(id, tainted_by_field, ssa_stack, context) :-
         populateTainted(id, tainted_by_field, context),
-        ssa_stack=[id, nil].
+        ssa_stack=nil.
 }
 
 .comp GuardOps : TransferOps {
@@ -84,8 +84,14 @@
         (
             (assign(id, id_var), property(id_var, tainted_by_field, ssa_stack, context));
             (uop(id, id_var, _), property(id_var, tainted_by_field, ssa_stack, context));
-            (bop(id, id_lhs, id_rhs, _), property(id_lhs, tainted_by_field, ssa_stack_lhs, context), ssa_stack=[id_rhs, ssa_stack_lhs]);
-            (bop(id, id_lhs, id_rhs, _), property(id_rhs, tainted_by_field, ssa_stack_rhs, context), ssa_stack=[id_lhs, ssa_stack_rhs])
+            (bop(id, id_lhs, id_rhs, _), property(id_lhs, tainted_by_field, ssa_stack_lhs, context), ssa_stack=[[id_rhs, context], ssa_stack_lhs]);
+            (bop(id, id_lhs, id_rhs, _), property(id_rhs, tainted_by_field, ssa_stack_rhs, context), ssa_stack=[[id_lhs, context], ssa_stack_rhs]);
+
+            // Guard of guards
+            bop(id, id_lhs, id_rhs, _),
+            property(id_lhs, tainted_by_field, ssa_stack_lhs, context),
+            property(id_rhs, tainted_by_field, ssa_stack_rhs, context),
+            mergeSSAStack(ssa_stack, ssa_stack_lhs, ssa_stack_rhs)
         ).
 }
 

@@ -11,6 +11,13 @@ contract Contract {
     } else {                  // guard
       selfdestruct(admin);    // safe
     }
-    selfdestruct(owner);      // safe
+  }
+  function bar() public {
+    if(msg.sender == owner) { // guard
+      // ...
+    } else {                  // guard
+      // ...
+    }
+    selfdestruct(admin);      // safe
   }
 }
