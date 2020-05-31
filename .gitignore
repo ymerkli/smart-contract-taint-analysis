@@ -13,7 +13,3 @@ __pycache__
 
 # Mac files
 **/.DS_Store
-
-
-# Latex files
-/out
