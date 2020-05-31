@@ -2,6 +2,8 @@
 #define GRAPH_UTILS
 
 /************************* Graph Operations *************************/
+// Parts of this code are inspired by the graph helper functions of Securify2
+// See: https://github.com/eth-sri/securify2/tree/master/securify/staticanalysis/souffle_analysis
 
 .comp DiGraph<TNode> {
     .decl edge(to: TNode, from: TNode)

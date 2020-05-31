@@ -69,8 +69,14 @@ lastSSAInBlock(id_block, id) :-
     blockStmt(id_block, id),
     !follows(_, id).
 
-// Blocks storing to field
-.decl blockStoresTo(id_block: Block, field: Name)
-blockStoresTo(id_block, field) :-
-    store(id_ssa, field, _),
-    blockStmt(id_block, id_ssa).
+// Merge two SSAStacks
+.decl mergeSSAStack(merged_ssa_stack: SSAStack, ssa_stack_1: SSAStack, ssa_stack_2: SSAStack)
+mergeSSAStack(merged_ssa_stack, ssa_stack_1, ssa_stack_2) :-
+    maybe_guard.guard(_, ssa_stack_1, _), maybe_guard.guard(_, ssa_stack_2, _),
+    ssa_stack_1 = [head_1, tail_1], ssa_stack_2 = [head_2, tail_2],
+    (
+        (tail_1 = nil, tail_2 = nil, merged_ssa_stack = [head_1, [head_2, nil]]);
+        (tail_2 = nil, merged_ssa_stack = [head_1, [head_2, tail_1]]);
+        (tail_1 = nil, merged_ssa_stack = [head_1, [head_2, tail_2]]);
+        (merged_ssa_stack = [head_1, [head_2, tail]], mergeSSAStack(tail, tail_1, tail_2))
+    ).

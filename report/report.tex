@@ -1,0 +1,124 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[latin1]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{titling}
+\usepackage{paralist}
+\usepackage{tikz}
+\usepackage{mathtools}
+\usepackage[margin=0.8in]{geometry}
+\usepackage[linesnumbered,ruled,vlined]{algorithm2e}
+
+\usepackage{array}
+\newcolumntype{L}[1]{>{\raggedright\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\newcolumntype{C}[1]{>{\centering\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\newcolumntype{R}[1]{>{\raggedleft\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+
+\setlength{\droptitle}{-7em}
+\posttitle{\par\end{center}}
+
+\newcommand*\xor{\mathbin{\oplus}}
+\DeclarePairedDelimiter{\ceil}{\lceil}{\rceil}
+\def\doubleunderline#1{\underline{\underline{#1}}}
+
+% Soldity code formating
+\usepackage{listings}
+\usepackage{xcolor}
+
+\definecolor{verylightgray}{rgb}{.97,.97,.97}
+\lstdefinelanguage{Solidity}{
+keywords=[1]{anonymous, assembly, assert, balance, break, call, callcode, case, catch, class, constant, continue, constructor, contract, debugger, default, delegatecall, delete, do, else, emit, event, experimental, export, external, false, finally, for, function, gas, if, implements, import, in, indexed, instanceof, interface, internal, is, length, library, log0, log1, log2, log3, log4, memory, modifier, new, payable, pragma, private, protected, public, pure, push, require, return, returns, revert, selfdestruct, send, solidity, storage, struct, suicide, super, switch, then, this, throw, transfer, true, try, typeof, using, view, while, with, addmod, ecrecover, keccak256, mulmod, ripemd160, sha256, sha3}, % generic keywords including crypto operations
+keywordstyle=[1]\color{blue}\bfseries,
+keywords=[2]{address, bool, byte, bytes, bytes1, bytes2, bytes3, bytes4, bytes5, bytes6, bytes7, bytes8, bytes9, bytes10, bytes11, bytes12, bytes13, bytes14, bytes15, bytes16, bytes17, bytes18, bytes19, bytes20, bytes21, bytes22, bytes23, bytes24, bytes25, bytes26, bytes27, bytes28, bytes29, bytes30, bytes31, bytes32, enum, int, int8, int16, int24, int32, int40, int48, int56, int64, int72, int80, int88, int96, int104, int112, int120, int128, int136, int144, int152, int160, int168, int176, int184, int192, int200, int208, int216, int224, int232, int240, int248, int256, mapping, string, uint, uint8, uint16, uint24, uint32, uint40, uint48, uint56, uint64, uint72, uint80, uint88, uint96, uint104, uint112, uint120, uint128, uint136, uint144, uint152, uint160, uint168, uint176, uint184, uint192, uint200, uint208, uint216, uint224, uint232, uint240, uint248, uint256, var, void, ether, finney, szabo, wei, days, hours, minutes, seconds, weeks, years},    % types; money and time units
+keywordstyle=[2]\color{teal}\bfseries,
+keywords=[3]{block, blockhash, coinbase, difficulty, gaslimit, number, timestamp, msg, data, gas, sender, sig, value, now, tx, gasprice, origin},    % environment variables
+keywordstyle=[3]\color{violet}\bfseries,
+identifierstyle=\color{black},
+sensitive=false,
+comment=[l]{//},
+morecomment=[s]{/*}{*/},
+commentstyle=\color{gray}\ttfamily,
+stringstyle=\color{red}\ttfamily,
+morestring=[b]',
+morestring=[b]"
+}
+\lstset{
+language=Solidity,
+backgroundcolor=\color{verylightgray},
+extendedchars=true,
+basicstyle=\footnotesize\ttfamily,
+showstringspaces=false,
+showspaces=false,
+numbers=left,
+numberstyle=\footnotesize,
+numbersep=9pt,
+tabsize=2,
+breaklines=true,
+showtabs=false,
+captionpos=b
+}
+
+\title{Static taint analysis for Ethereum contracts \\ \large Program analysis for system security and reliability}
+\author{Eric Marty, Yannick Merkli}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\pagenumbering{arabic}
+\setlength\parindent{0pt}
+
+In this project we implement a static taint analyzer for Ethereum smart contracts written in Solidity.
+We want to label contracts as \textbf{Safe} or \textbf{Tainted} based on whether an untrusted user can call \lstinline{selfdestruct} and therefore remove the contract from the blockchain.
+
+More concretely we label a contract as \textbf{Tainted} if \lstinline{msg.sender} is tainted when \lstinline{selfdestruct} is invoked.
+Taints arise from function and \lstinline{msg} arguments.
+A taint can be removed by a sanitizer, a branch (\lstinline{if}, \lstinline{require}, \lstinline{assert}) depending on a guard.
+A guard is a statement, explicitly depending on \lstinline{msg.sender} and all other values it depends must not be tainted.
+
+\section{Analyzer Structure}
+The solidity contracts are parsed and translated into a given Intermediate Representation (IR) and then analyzed in Datalog.
+
+\subsection{Function Context \& Block Graph}
+To catch contextual relationships between functions, we implement \lstinline{contexts}, based on a call stack, that allows us to assign taint and sanitized tags to statements, based on their function context.
+We initially build a call stack for each public function in the contract (\lstinline{contexts.contextForInit}) and then recursively extend those contexts for internal function calls (\lstinline{contexts.contextForCall}), up to a limit of 3 recursive function calls, to prevent infinite recursion.
+
+\lstinputlisting[language=Solidity]{example_contracts/context.sol}
+
+We also build a \lstinline{block_graph}, that represents the program flow inside of functions of a contract.
+This block graph provides a \lstinline{dominatedBy} rule, that allows us to easily identify which blocks are always traversed to get to other blocks.
+
+\subsection{Taint}
+We implement two kinds of taint tags.
+We distinguish between hard taints (\lstinline{is_tainted}) and weak taints (\lstinline{maybe_tainted}) and their counterparts for storage variables \lstinline{tainted_storage} and \lstinline{maybe_tainted_storage}.
+Taint tags are propagated in the code on a per statement basis and are passed into and out of internal function calls.
+
+We assign a hard taint tag to all function arguments in top level functions, any occurrences of \lstinline{msg.sender} and \lstinline{msg.value}, loads from tainted storage variables and return values from functions of context depth $>3$.
+We assign a weak taint tag to elements, if they load from a weak tainted storage field.
+
+\lstinputlisting[language=Solidity]{example_contracts/taints.sol}
+
+We assign storage fields a hard/weak taint tag if they store a value that has a hard/weak taint assigned to it.
+Additionally we assign storage fields a weak taint tag on the first line in every top level function, if there exists a function where a storage field has a weak/hard taint tag assigned on the last line.
+
+\lstinputlisting[language=Solidity]{example_contracts/storage.sol}
+
+\subsection{Sanitizer}
+
+We treat every guard condition that depends on \lstinline{msg.sender} as a potential guard (\lstinline{maybe_guard}), however we do not immediately check for taint tags on the other elements.
+Instead, we build a stack of \lstinline{(SSA, Context)} tuples, which includes each statement the guard depends on (except \lstinline{msg.sender}) and the context in which it was assigned.
+This is done in order to avoid cyclic redundancies between \lstinline{sanitized} and \lstinline{tainted} tags.
+A block which branches on a \lstinline{maybe_guard} (\lstinline{maybeGuardBlock}) forward propagates \lstinline{maybeSantitizedBlock} tags into descendant blocks and descendant function calls.
+It further backpropagates \lstinline{maybeSantitizedBlock} tags to all blocks of equal or lower branching depth.
+
+We further handle functions with multiple returns as an edge case, since multiple returns allow for guard evasion.
+We assign \lstinline{notSanitizedBlock} tags to blocks, to which multiple returns point to, of which at least one has no forward propagated \lstinline{maybeSantitizedBlock} tag.
+
+\lstinputlisting[language=Solidity]{example_contracts/multi_return.sol}
+
+\subsection{Tying Everything Together}
+A sink (\lstinline{selfdestruct}) is tainted if the block it lies in is not a forward propagated \lstinline{maybeSantitizedBlock}, the block is a forward propagated \lstinline{maybeSantitizedBlock} but at least one program execution path does not pass a guard (\lstinline{notSanitizedBlock}) or the block is a forward propagated \lstinline{maybeSantitizedBlock} but the SSA stack of its guard, contains at least one tuple \lstinline{(id, ctx)} where \lstinline{id} is tainted in context \lstinline{ctx}.
+
+\end{document}

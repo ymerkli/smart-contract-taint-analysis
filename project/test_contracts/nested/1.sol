@@ -7,7 +7,7 @@ contract Contract {
   function maybeSanitize(int x) public {
     if(x < 10) {
       if(x < 5) {
-        //...
+        // ...
       }
       require(msg.sender == owner);
       return;

@@ -12,7 +12,9 @@
     "9": "Safe",
     "10": "Tainted",
     "11": "Tainted",
-    "12": "Safe"
+    "12": "Safe",
+    "13": "Tainted",
+    "14": "Tainted"
   },
   "given": {
     "0": "Tainted",
@@ -33,7 +35,27 @@
   "guard": {
     "0": "Tainted",
     "1": "Safe",
-    "2": "Safe"
+    "2": "Safe",
+    "3": "Tainted",
+    "4": "Safe",
+    "5": "Safe",
+    "6": "Tainted",
+    "7": "Safe",
+    "8": "Tainted",
+    "9": "Safe",
+    "10": "Tainted",
+    "11": "Safe",
+    "12": "Safe",
+    "13": "Tainted",
+    "14": "Tainted",
+    "15": "Tainted",
+    "16": "Tainted",
+    "17": "Tainted",
+    "18": "Tainted",
+    "19": "Tainted",
+    "20": "Safe",
+    "21": "Tainted",
+    "22": "Tainted"
   },
   "hard": {
     "0": "Safe",
@@ -63,6 +85,16 @@
     "9": "Safe",
     "10": "Safe"
   },
+  "preliminary": {
+    "17": "Tainted",
+    "20": "Tainted",
+    "21": "Safe",
+    "24": "Safe",
+    "29": "Tainted",
+    "31": "Safe",
+    "33": "Safe",
+    "37": "Tainted"
+  },
   "recursion": {
     "0": "Tainted",
     "1": "Tainted"
@@ -73,6 +105,8 @@
     "2": "Tainted",
     "3": "Tainted",
     "4": "Safe",
-    "5": "Safe"
+    "5": "Safe",
+    "6": "Tainted",
+    "7": "Tainted"
   }
 }
